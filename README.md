@@ -155,9 +155,21 @@ curl -X POST http://localhost:3913/api/customers \
 
 ### 状态校验
 
-委托状态必须在允许值范围内：`待收件` `已收件` `清洁中` `削尖中` `试写中` `已封存` `已寄回`。
+创建、更新和登记事件时，传入的 `status` 必须在允许值范围内，否则返回 `400`。
 
-客户状态允许值：`活跃` `休眠`。
+- 委托状态允许值：`待收件` `已收件` `清洁中` `削尖中` `试写中` `已封存` `已寄回`
+- 客户状态允许值：`活跃` `休眠`
+
+示例：
+
+```bash
+curl -X POST http://localhost:3913/api/customers \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"测试","contact":"test@test.com","status":"已删除"}'
+# 返回 {"error":"invalid status: 已删除"}
+```
+
+未传 `status` 时使用集合的默认状态（客户默认 `活跃`，委托默认 `待收件`）。
 
 ### 404 校验
 

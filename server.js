@@ -64,6 +64,14 @@ function titleFor(collectionConfig, data) {
     .join(' / ') || data.name || data.title || data.code || '';
 }
 
+function validateStatus(collectionConfig, status) {
+  if (collectionConfig.statuses && status && !collectionConfig.statuses.includes(status)) {
+    const error = new Error('invalid status: ' + status);
+    error.status = 400;
+    throw error;
+  }
+}
+
 function validate(collectionConfig, data) {
   const missing = (collectionConfig.required || []).filter((field) => data[field] === undefined || data[field] === '');
   if (missing.length) {
@@ -71,6 +79,7 @@ function validate(collectionConfig, data) {
     error.status = 400;
     throw error;
   }
+  validateStatus(collectionConfig, data.status);
 }
 
 function insertEvent({ recordId, collection, action, status, actor, note, data }) {
@@ -308,7 +317,7 @@ app.get('/api/:collection/:id', (req, res, next) => {
 
 app.patch('/api/:collection/:id', (req, res, next) => {
   try {
-    findCollection(req.params.collection);
+    const collectionConfig = findCollection(req.params.collection);
     const record = loadRecord(req.params.collection, req.params.id);
     if (!record) return res.status(404).json({ error: 'not found' });
     const nextData = { ...record, ...req.body };
@@ -318,6 +327,7 @@ app.patch('/api/:collection/:id', (req, res, next) => {
     delete nextData.updatedAt;
     const status = nextData.status || record.status;
     nextData.status = status;
+    validateStatus(collectionConfig, status);
     saveRecord(req.params.collection, req.params.id, nextData, status);
     insertEvent({
       recordId: req.params.id,
@@ -340,9 +350,7 @@ app.post('/api/:collection/:id/events', (req, res, next) => {
     const record = loadRecord(req.params.collection, req.params.id);
     if (!record) return res.status(404).json({ error: 'not found' });
     const status = req.body.status || record.status;
-    if (collectionConfig.statuses && !collectionConfig.statuses.includes(status)) {
-      return res.status(400).json({ error: 'invalid status: ' + status });
-    }
+    validateStatus(collectionConfig, status);
     const nextData = { ...record, ...(req.body.fields || {}), status };
     delete nextData.id;
     delete nextData.collection;
