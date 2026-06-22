@@ -255,6 +255,111 @@ app.get('/api/customers/:id/profile', (req, res, next) => {
   }
 });
 
+app.get('/api/inventory/low-stock', (req, res, next) => {
+  try {
+    findCollection('inventory');
+    const allItems = select(
+      "SELECT * FROM records WHERE collection = 'inventory' ORDER BY updated_at DESC;"
+    ).map(toRecord);
+    const lowStockItems = allItems.filter((item) => {
+      const quantity = Number(item.quantity) || 0;
+      const threshold = Number(item.threshold) || 0;
+      return quantity <= threshold;
+    });
+    res.json(lowStockItems);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/inventory/:id/stock-in', (req, res, next) => {
+  try {
+    findCollection('inventory');
+    const item = loadRecord('inventory', req.params.id);
+    if (!item) return res.status(404).json({ error: 'inventory item not found' });
+
+    const amount = Number(req.body.amount);
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: '入库数量必须大于 0' });
+    }
+
+    const currentQuantity = Number(item.quantity) || 0;
+    const newQuantity = currentQuantity + amount;
+
+    const nextData = { ...item, quantity: newQuantity };
+    delete nextData.id;
+    delete nextData.collection;
+    delete nextData.createdAt;
+    delete nextData.updatedAt;
+
+    const status = nextData.status || item.status;
+    nextData.status = status;
+
+    saveRecord('inventory', req.params.id, nextData, status);
+    insertEvent({
+      recordId: req.params.id,
+      collection: 'inventory',
+      action: '入库',
+      status,
+      actor: req.body.actor || '',
+      note: req.body.note || '入库 ' + amount + ' ' + (item.unit || ''),
+      data: { amount, beforeQuantity: currentQuantity, afterQuantity: newQuantity }
+    });
+
+    res.json(loadRecord('inventory', req.params.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/inventory/:id/stock-out', (req, res, next) => {
+  try {
+    findCollection('inventory');
+    const item = loadRecord('inventory', req.params.id);
+    if (!item) return res.status(404).json({ error: 'inventory item not found' });
+
+    const amount = Number(req.body.amount);
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: '扣减数量必须大于 0' });
+    }
+
+    const currentQuantity = Number(item.quantity) || 0;
+    if (currentQuantity < amount) {
+      return res.status(400).json({
+        error: '库存不足，扣减后将为负数',
+        currentQuantity,
+        requestedAmount: amount
+      });
+    }
+
+    const newQuantity = currentQuantity - amount;
+
+    const nextData = { ...item, quantity: newQuantity };
+    delete nextData.id;
+    delete nextData.collection;
+    delete nextData.createdAt;
+    delete nextData.updatedAt;
+
+    const status = nextData.status || item.status;
+    nextData.status = status;
+
+    saveRecord('inventory', req.params.id, nextData, status);
+    insertEvent({
+      recordId: req.params.id,
+      collection: 'inventory',
+      action: '扣减',
+      status,
+      actor: req.body.actor || '',
+      note: req.body.note || '扣减 ' + amount + ' ' + (item.unit || ''),
+      data: { amount, beforeQuantity: currentQuantity, afterQuantity: newQuantity }
+    });
+
+    res.json(loadRecord('inventory', req.params.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post('/api/:collection', (req, res, next) => {
   try {
     const collectionConfig = findCollection(req.params.collection);
