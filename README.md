@@ -37,6 +37,17 @@ npm start
 - `GET /api/commissions/:id/timeline` 委托时间线
 - `DELETE /api/commissions/:id` 删除委托
 
+### 修复材料库存
+
+- `GET /api/inventory` 库存材料列表
+- `POST /api/inventory` 登记库存材料
+- `GET /api/inventory/:id` 库存材料详情
+- `PATCH /api/inventory/:id` 更新库存材料
+- `POST /api/inventory/:id/stock-in` 材料入库
+- `POST /api/inventory/:id/stock-out` 材料扣减
+- `GET /api/inventory/low-stock` 低库存材料列表
+- `DELETE /api/inventory/:id` 删除库存材料
+
 ## 接口示例
 
 ### 创建客户档案
@@ -138,6 +149,53 @@ curl http://localhost:3913/api/commissions?customerName=陆青
 curl http://localhost:3913/api/commissions?status=清洁中
 ```
 
+### 查询库存材料
+
+```bash
+curl http://localhost:3913/api/inventory
+curl http://localhost:3913/api/inventory/inventory-seed-1
+curl http://localhost:3913/api/inventory/low-stock
+```
+
+### 登记库存材料
+
+```bash
+curl -X POST http://localhost:3913/api/inventory \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "清洁液",
+    "spec": "专用羽毛清洁液 250ml",
+    "unit": "瓶",
+    "quantity": 12,
+    "threshold": 4,
+    "remark": "用于修复前的羽毛表面清洁"
+  }'
+```
+
+### 材料入库
+
+```bash
+curl -X POST http://localhost:3913/api/inventory/inventory-seed-1/stock-in \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "amount": 15,
+    "actor": "林师傅",
+    "note": "补充灰雁大号羽毛管"
+  }'
+```
+
+### 材料扣减
+
+```bash
+curl -X POST http://localhost:3913/api/inventory/inventory-seed-1/stock-out \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "amount": 3,
+    "actor": "林师傅",
+    "note": "用于灰雁羽毛笔尖修复"
+  }'
+```
+
 ## 验证方式
 
 ### 必填字段校验
@@ -170,6 +228,17 @@ curl -X POST http://localhost:3913/api/customers \
 ```
 
 未传 `status` 时使用集合的默认状态（客户默认 `活跃`，委托默认 `待收件`）。
+
+### 库存扣减校验
+
+扣减数量必须大于 `0`，且扣减后库存不能为负数。库存不足时返回 `400`：
+
+```bash
+curl -X POST http://localhost:3913/api/inventory/inventory-seed-5/stock-out \
+  -H 'Content-Type: application/json' \
+  -d '{"amount": 999}'
+# 返回 {"error":"库存不足，扣减后将为负数","currentQuantity":5,"requestedAmount":999}
+```
 
 ### 404 校验
 
