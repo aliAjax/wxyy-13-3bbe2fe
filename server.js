@@ -215,10 +215,53 @@ app.get('/api/:collection', (req, res, next) => {
   }
 });
 
+app.get('/api/customers/:id/profile', (req, res, next) => {
+  try {
+    findCollection('customers');
+    const customer = loadRecord('customers', req.params.id);
+    if (!customer) return res.status(404).json({ error: 'customer not found' });
+    const likePattern = '%"customerId":"' + req.params.id + '"%';
+    const commissions = select(
+      "SELECT * FROM records WHERE collection = 'commissions' AND data LIKE " +
+      sqlValue(likePattern) +
+      ' ORDER BY updated_at DESC LIMIT 5;'
+    ).map(toRecord).map((c) => ({
+      id: c.id,
+      customerName: c.customerName,
+      featherSource: c.featherSource,
+      damageType: c.damageType,
+      status: c.status,
+      quote: c.quote,
+      createdAt: c.createdAt,
+      updatedAt: c.updatedAt
+    }));
+    const totalCommissions = select(
+      "SELECT COUNT(*) AS count FROM records WHERE collection = 'commissions' AND data LIKE " +
+      sqlValue(likePattern) +
+      ';'
+    )[0].count;
+    res.json({ customer, totalCommissions, recentCommissions: commissions });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post('/api/:collection', (req, res, next) => {
   try {
     const collectionConfig = findCollection(req.params.collection);
     const data = { ...collectionConfig.defaults, ...req.body };
+
+    if (req.params.collection === 'commissions' && data.customerId) {
+      const customer = loadRecord('customers', data.customerId);
+      if (customer) {
+        if (!data.customerName) data.customerName = customer.name;
+        if (!data.contact) data.contact = customer.contact;
+        if (!data.deliveryMethod && customer.preferredDelivery) {
+          data.deliveryMethod = customer.preferredDelivery;
+        }
+      }
+    }
+
     const status = data.status || collectionConfig.defaultStatus || '';
     data.status = status;
     validate(collectionConfig, data);
